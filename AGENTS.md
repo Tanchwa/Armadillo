@@ -1,5 +1,106 @@
 # armadillo - AI Agent Guide
 
+> The section below is hand-written project context. Everything after
+> "## Project Structure" is the generic kubebuilder guide the CLI generated.
+
+## What Armadillo is
+
+A Kubernetes operator that distributes and promotes AppArmor profiles. It pairs
+with **[`apparmor-profile-action`](https://github.com/Tanchwa/apparmor-profile-action)**
+(checked out at `../apparmor-profile-action`), which learns a profile in CI and
+commits it to the application repo.
+
+The division of labour:
+
+| | Does |
+|---|---|
+| the action | Learns a profile in CI, commits it to the app repo, opens the PR |
+| Armadillo | Observes what the workload does in a *real* cluster, feeds that back, and gets profiles onto nodes |
+
+A CI-learned profile is a **lower bound**, not a policy — one run only sees the
+code paths it exercised. The action's `merge: true` (v1.1+) makes profiles
+cumulative; Armadillo produces the records that CI cannot.
+
+**Read [`docs/design.md`](docs/design.md) before proposing architecture.** It is
+the agreed design, not a sketch, and it records *why* for each decision. The
+reasoning is not in the code and not in any memory file — this repo is the only
+copy.
+
+## Current state
+
+- Scaffolded with kubebuilder v4.15.0. **No APIs and no controllers yet.**
+- `go build ./...` passes. No remote configured; nothing pushed.
+- Commits so far: design doc, scaffold, two domain corrections.
+
+## Creating APIs — pass the group explicitly
+
+`PROJECT` has `domain: andrewsutliff.com`. kubebuilder treats the domain as a
+*suffix*, so the group is prepended to it. **Always pass `--group armadillo`:**
+
+```bash
+kubebuilder create api --group armadillo --version v1alpha1 --kind <Kind>
+#   -> armadillo.andrewsutliff.com/v1alpha1
+```
+
+Omitting it, or passing something else, silently lands the kind in a different
+API group. That is painful to notice and worse to undo once CRDs are in a
+cluster.
+
+## Decisions already made — do not re-litigate
+
+Each of these was argued through; `docs/design.md` has the full reasoning.
+
+- **Decide cluster-wide, apply per node.** The union of audit records across all
+  nodes feeds one decision. Nodes are where policy is *loaded*, never where it
+  is *decided* — a node that only ran the workload during a drain would learn a
+  startup-only profile, go quiet, and promote itself.
+- **Do not gate promotion on a silence timer.** A profile is quiet both when it
+  is complete and when the uncovered path has not run yet. Gate on a checklist
+  of *observed events* (deploy, restart, rollback, upstream timeout, cert
+  rotation) instead.
+- **Dropped audit records hard-block promotion.** Lost records look exactly like
+  quiet; this is the one way the design fails open. Use `auditd`/`audispd`, not
+  `dmesg` — the ring buffer gives no way to know what was missed.
+- **Promote slowly, demote everywhere at once.** A denial on one node is
+  evidence the profile is wrong for the workload, not for that node.
+- **Node labels carry a content hash**, not just the profile name. Profiles load
+  by name, so a node can hold a stale profile under the right name and look
+  healthy.
+- **The startup gate is a native sidecar** — an `initContainer` with
+  `restartPolicy: Always` (k8s 1.29+), injected by a mutating admission webhook.
+  A plain sidecar does **not** gate main-container start.
+- **Git is the source of truth.** The operator and the action both write to the
+  profile committed in the application repo. A separate operator-side store
+  would diverge from it.
+
+## Open questions
+
+- CRD shape. Sketch only: `ManagedProfile` (profile, lifecycle state, content
+  hash) and `ProfileBinding` (workload to profile). Not settled.
+- Where the cluster-wide union lives, and what happens to it on operator restart.
+- How PRs get filed: reuse the action's propose job, or talk to the forge directly.
+- What "one full business cycle" means per workload, and whether it is
+  configurable or inferred.
+
+## Deferred
+
+- **Baking profiles into the node image**, with the operator calling back to an
+  image-builder endpoint. This is the *better* answer to autoscale latency — a
+  node would be born with the profile loaded, so node birth is not gated on a
+  reconcile loop — but it is parked until the basics work. Andrew's call.
+
+## Working notes
+
+- Local toolchain: kubebuilder v4.15.0, Go 1.27.3 (`go.mod` targets 1.26.0 from
+  the template).
+- `Tanchwa/Todoist-Reclaim-Webhook` is the action's first real consumer. It is
+  still pinned to `@v1`, so it has not picked up v1.1 or merge mode.
+- If Armadillo ever emits a profile itself: the action's drift check is a
+  byte comparison, so emitted profiles must be a **fixpoint** — nothing that
+  varies run to run may appear in the file, or every run rewrites it and opens
+  a no-op PR.
+
+
 ## Project Structure
 
 **Single-group layout (default):**
