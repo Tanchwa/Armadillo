@@ -1,0 +1,9 @@
+apiVersion: armadillo.andrewsutliff.com/v1alpha1
+kind: PromotionPolicy
+metadata:
+  labels:
+    app.kubernetes.io/name: armadillo
+    app.kubernetes.io/managed-by: kustomize
+  name: promotionpolicy-sample
+spec:
+  # TODO(user): Add fields here

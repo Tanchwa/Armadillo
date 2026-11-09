@@ -1,0 +1,189 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
+  name: promotionpolicies.armadillo.andrewsutliff.com
+spec:
+  group: armadillo.andrewsutliff.com
+  names:
+    kind: PromotionPolicy
+    listKind: PromotionPolicyList
+    plural: promotionpolicies
+    singular: promotionpolicy
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: PromotionPolicy is the Schema for the promotionpolicies API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: spec defines the desired state of PromotionPolicy
+            properties:
+              promotionRules:
+                description: |-
+                  PromotionRules is a list of promotion rules that define the promotion policy
+                  Proting referes to promotion from Apparmor complain mode to Apparmor enforce mode, or from a lower security level to a higher security level
+                items:
+                  properties:
+                    requirements:
+                      description: requirements are ANDed. Rules in promotionRules
+                        are ORed.
+                      items:
+                        properties:
+                          key:
+                            enum:
+                            - DeploysObserved
+                            - RestartsObserved
+                            - RollbacksObserved
+                            - UpstreamErrorsObserved
+                            - CertRotationsObserved
+                            - QuietBusinessCycles
+                            - RouteCoveragePercent
+                            type: string
+                          operator:
+                            enum:
+                            - In
+                            - NotIn
+                            - Exists
+                            - DoesNotExist
+                            - Gt
+                            - Lt
+                            type: string
+                          values:
+                            items:
+                              type: string
+                            type: array
+                            x-kubernetes-list-type: atomic
+                        required:
+                        - key
+                        - operator
+                        type: object
+                        x-kubernetes-validations:
+                        - message: Gt and Lt take exactly one integer value
+                          rule: '!(self.operator in [''Gt'',''Lt'']) || (size(self.values)
+                            == 1 && self.values[0].matches(''^[0-9]+$''))'
+                        - message: In and NotIn take at least one value
+                          rule: '!(self.operator in [''In'',''NotIn'']) || size(self.values)
+                            > 0'
+                        - message: Exists and DoesNotExist take no values
+                          rule: '!(self.operator in [''Exists'',''DoesNotExist''])
+                            || !has(self.values)'
+                      minItems: 1
+                      type: array
+                      x-kubernetes-list-type: atomic
+                  required:
+                  - requirements
+                  type: object
+                minItems: 1
+                type: array
+              targetProfile:
+                description: TargetProfile is the name of the target ManagedProfile
+                  that this PromotionPolicy applies to
+                properties:
+                  apiVersion:
+                    description: API version of the referent
+                    type: string
+                  kind:
+                    description: Kind of the referent
+                    type: string
+                  name:
+                    description: Name of the referent
+                    type: string
+                  namespace:
+                    description: Namespace of the referent
+                    type: string
+                type: object
+            required:
+            - promotionRules
+            - targetProfile
+            type: object
+          status:
+            description: status defines the observed state of PromotionPolicy
+            properties:
+              conditions:
+                description: |-
+                  PromotionPolicy object is similar to ConfigMap as it's a difition of actions and not an object
+                  therefore there is no need to have conditions for this object
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
