@@ -1,8 +1,8 @@
 # armadillo
-// TODO(user): Add simple overview of use/purpose
+The Automated AppArmor Profile generator for Kubernetes workloads
 
 ## Description
-// TODO(user): An in-depth paragraph about your project and overview of use
+Armadillo is a Kubernetes controller that automatically generates AppArmor profiles for workloads running in a Kubernetes cluster. It watches for new pods and generates AppArmor profiles based on the behavior of the containers in those pods. The generated profiles are then applied to the pods in complain mode, allowing users and the operator to review the profiles and make any necessary adjustments before graduating to enforce mode.
 
 ## Getting Started
 

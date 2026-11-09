@@ -30,21 +30,7 @@ copy.
 
 - Scaffolded with kubebuilder v4.15.0. **No APIs and no controllers yet.**
 - `go build ./...` passes. No remote configured; nothing pushed.
-- Commits so far: design doc, scaffold, two domain corrections.
-
-## Creating APIs — pass the group explicitly
-
-`PROJECT` has `domain: andrewsutliff.com`. kubebuilder treats the domain as a
-*suffix*, so the group is prepended to it. **Always pass `--group armadillo`:**
-
-```bash
-kubebuilder create api --group armadillo --version v1alpha1 --kind <Kind>
-#   -> armadillo.andrewsutliff.com/v1alpha1
-```
-
-Omitting it, or passing something else, silently lands the kind in a different
-API group. That is painful to notice and worse to undo once CRDs are in a
-cluster.
+- Commits so far: design doc, scaffold
 
 ## Decisions already made — do not re-litigate
 
