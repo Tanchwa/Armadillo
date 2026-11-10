@@ -71,7 +71,7 @@ var (
 // on one line would otherwise smuggle in a second profile. Braces are only
 // allowed balanced inside one word, as in "/sys/{a,b}/**" or "@{PROC}".
 func checkBraces(line string) error {
-	for _, word := range strings.Fields(line) {
+	for word := range strings.FieldsSeq(line) {
 		if strings.HasPrefix(word, "{") || strings.HasPrefix(word, "}") {
 			return errors.New("a rule must not contain a free-standing brace")
 		}
