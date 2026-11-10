@@ -54,7 +54,10 @@ var _ = Describe("ProfileNodeStatus Controller", func() {
 						Name:      resourceName,
 						Namespace: resourceNamespace,
 					},
-					// TODO(user): Specify other spec details if needed.
+					Spec: armadillov1alpha1.ProfileNodeStatusSpec{
+						NodeName:   "test-node",
+						ProfileRef: armadillov1alpha1.ManagedProfileReference{Namespace: "default", Name: "test-profile"},
+					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}

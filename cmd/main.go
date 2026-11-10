@@ -20,15 +20,21 @@ import (
 	"crypto/tls"
 	"flag"
 	"os"
+	"strings"
+	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
@@ -36,7 +42,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	armadillov1alpha1 "github.com/tanchwa/armadillo/api/v1alpha1"
+	"github.com/tanchwa/armadillo/internal/apparmor"
 	"github.com/tanchwa/armadillo/internal/controller"
+	"github.com/tanchwa/armadillo/internal/gitsource"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -62,6 +70,13 @@ func main() {
 	var secureMetrics bool
 	var enableHTTP2 bool
 	var tlsOpts []func(*tls.Config)
+	var gitAllowedHosts string
+	var gitSyncInterval time.Duration
+	flag.StringVar(&gitAllowedHosts, "git-allowed-hosts", "github.com",
+		"Comma-separated hosts that repository URLs may point at. Repository URLs come from Secrets "+
+			"that namespace users write, so every other host is refused.")
+	flag.DurationVar(&gitSyncInterval, "git-sync-interval", 5*time.Minute,
+		"How often each ManagedProfile's repository is read again.")
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -161,6 +176,15 @@ func main() {
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "a20cc816.andrewsutliff.com",
+		// Only Secrets that opted in with the label are cached. Without this the
+		// manager would hold a copy of every Secret in the cluster in memory.
+		Cache: cache.Options{
+			ByObject: map[client.Object]cache.ByObject{
+				&corev1.Secret{}: {Label: labels.SelectorFromSet(labels.Set{
+					armadillov1alpha1.SecretTypeLabel: armadillov1alpha1.SecretTypeRepository,
+				})},
+			},
+		},
 		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
 		// when the Manager ends. This requires the binary to immediately end when the
 		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly
@@ -188,6 +212,11 @@ func main() {
 	if err := (&controller.ManagedProfileReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		Fetcher: gitsource.GitFetcher{
+			AllowedHosts: strings.Split(strings.ToLower(gitAllowedHosts), ","),
+			MaxBytes:     apparmor.MaxProfileBytes,
+		},
+		SyncInterval: gitSyncInterval,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "managedprofile")
 		os.Exit(1)
@@ -213,6 +242,10 @@ func main() {
 		setupLog.Error(err, "Failed to create controller", "controller", "profilenodestatus")
 		os.Exit(1)
 	}
+	// The Pod webhook is not registered here: it runs in its own binary,
+	// cmd/webhook, so that the manager's permissions and the webhook's
+	// availability stay separate. kubebuilder registers new webhooks at the
+	// marker below; move any it adds for Pods to cmd/webhook/main.go.
 	// +kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

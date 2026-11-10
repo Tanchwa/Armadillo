@@ -63,10 +63,20 @@ spec:
                 description: GitOptions defines the Git repository and branch to use
                   for this ManagedProfile.
                 properties:
+                  branch:
+                    description: Branch is the branch to read the profile from. Empty
+                      means the repository's default branch.
+                    maxLength: 255
+                    type: string
                   openPR:
                     description: OpenPR indicates whether to open a pull request for
                       changes to the ManagedProfile.
                     type: boolean
+                  path:
+                    description: Path is the path of the profile file within the repository.
+                    maxLength: 1024
+                    minLength: 1
+                    type: string
                   prBody:
                     description: PRBody is the body of the pull request to open for
                       changes to the ManagedProfile.
@@ -92,6 +102,7 @@ spec:
                     type: object
                     x-kubernetes-map-type: atomic
                 required:
+                - path
                 - repositorySecret
                 type: object
               promotionPolicyRef:
@@ -213,6 +224,31 @@ spec:
                   profile is in the process of being installed on the target system.
                   either the profile is being installed for the first time, or it is being reinstalled due to a change in the profile.
                 type: string
+              profile:
+                description: |-
+                  Profile is the profile the manager last fetched from git and validated.
+                  Loaders load this and nothing else, so they never need repository credentials.
+                properties:
+                  content:
+                    description: |-
+                      Content is the profile text exactly as committed. The loader does not load it
+                      as written: it sets the profile name and mode itself.
+                    maxLength: 262144
+                    type: string
+                  hash:
+                    description: |-
+                      Hash is the hash of content, as "sha256:<hex>". A loader reports this value
+                      back in ProfileNodeStatus once it has loaded the profile.
+                    maxLength: 128
+                    type: string
+                  revision:
+                    description: Revision is the git commit the content was read from.
+                    maxLength: 64
+                    type: string
+                required:
+                - content
+                - hash
+                type: object
               promoting:
                 description: profile has passed the promotion threshold and is in
                   the pocess of being promoted and commited back to the source repository.

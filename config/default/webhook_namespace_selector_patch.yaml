@@ -1,0 +1,11 @@
+# The webhook fails closed, so it is limited to namespaces that opted in:
+#
+#   kubectl label namespace <name> armadillo.andrewsutliff.com/injection=enabled
+#
+# Without this selector an outage of the webhook would block pod creation in
+# every namespace, kube-system and Armadillo's own included.
+- op: add
+  path: /webhooks/0/namespaceSelector
+  value:
+    matchLabels:
+      armadillo.andrewsutliff.com/injection: enabled

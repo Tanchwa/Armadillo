@@ -54,7 +54,18 @@ var _ = Describe("DemotionPolicy Controller", func() {
 						Name:      resourceName,
 						Namespace: resourceNamespace,
 					},
-					// TODO(user): Specify other spec details if needed.
+					Spec: armadillov1alpha1.DemotionPolicySpec{
+						Probation: armadillov1alpha1.Probation{
+							Requirements: []armadillov1alpha1.ProbationRequirement{{
+								Key: armadillov1alpha1.DeploysSincePromotion, Operator: "Lt", Values: []string{"3"},
+							}},
+						},
+						DemotionRules: []armadillov1alpha1.DemotionRule{{
+							Requirements: []armadillov1alpha1.DemotionRequirement{{
+								Key: "DenialsObserved", Operator: "Gt", Values: []string{"0"},
+							}},
+						}},
+					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}

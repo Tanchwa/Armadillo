@@ -1,0 +1,43 @@
+# Hand-written, like the loader's: controller-gen only generates the manager's
+# role. The webhook reads ProfileBindings and nothing else.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/name: armadillo
+    app.kubernetes.io/managed-by: kustomize
+  name: webhook
+  namespace: system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: armadillo
+    app.kubernetes.io/managed-by: kustomize
+  name: webhook-role
+rules:
+- apiGroups:
+  - armadillo.andrewsutliff.com
+  resources:
+  - profilebindings
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/name: armadillo
+    app.kubernetes.io/managed-by: kustomize
+  name: webhook-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: webhook-role
+subjects:
+- kind: ServiceAccount
+  name: webhook
+  namespace: system

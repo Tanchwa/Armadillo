@@ -114,6 +114,8 @@ lint-config: golangci-lint ## Verify golangci-lint linter configuration
 build: manifests generate fmt vet ## Build manager binary.
 	go build -o bin/manager cmd/main.go
 	go build -o bin/loader cmd/loader/main.go
+	go build -o bin/webhook cmd/webhook/main.go
+	go build -o bin/gate cmd/gate/main.go
 
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
@@ -153,6 +155,7 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 build-installer: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
 	mkdir -p dist
 	cd config/manager && "$(KUSTOMIZE)" edit set image controller=${IMG}
+	cd config/webhook-server && "$(KUSTOMIZE)" edit set image controller=${IMG}
 	cd config/loader && "$(KUSTOMIZE)" edit set image loader=${LOADER_IMG}
 	"$(KUSTOMIZE)" build config/default > dist/install.yaml
 
@@ -175,6 +178,7 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 .PHONY: deploy
 deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	cd config/manager && "$(KUSTOMIZE)" edit set image controller=${IMG}
+	cd config/webhook-server && "$(KUSTOMIZE)" edit set image controller=${IMG}
 	cd config/loader && "$(KUSTOMIZE)" edit set image loader=${LOADER_IMG}
 	"$(KUSTOMIZE)" build config/default | "$(KUBECTL)" apply -f -
 

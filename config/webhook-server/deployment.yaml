@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webhook
+  namespace: system
+  labels:
+    app.kubernetes.io/name: armadillo
+    app.kubernetes.io/component: webhook
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: armadillo
+      app.kubernetes.io/component: webhook
+  # Pod creation in opted-in namespaces fails while no replica is up.
+  replicas: 2
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: webhook
+      labels:
+        app.kubernetes.io/name: armadillo
+        app.kubernetes.io/component: webhook
+    spec:
+      serviceAccountName: webhook
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: armadillo
+                  app.kubernetes.io/component: webhook
+      containers:
+      - name: webhook
+        # The same image as the manager: it holds /manager, /webhook and /gate.
+        image: controller:latest
+        command:
+        - /webhook
+        args:
+        - --health-probe-bind-address=:8081
+        # Must match the hostPort of the loader DaemonSet.
+        - --loader-port=9099
+        env:
+        # The gate injected into pods runs from this same image. kustomize does
+        # not rewrite image names outside "image:" fields, so
+        # config/default/kustomization.yaml copies the image above into here.
+        - name: GATE_IMAGE
+          value: controller:latest
+        ports:
+        - containerPort: 8081
+          name: health
+          protocol: TCP
+        securityContext:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - "ALL"
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: 500m
+            memory: 128Mi
+          requests:
+            cpu: 10m
+            memory: 64Mi
+        # The serving certificate is mounted by config/default/manager_webhook_patch.yaml.
+        volumeMounts: []
+      volumes: []
+      terminationGracePeriodSeconds: 10

@@ -112,6 +112,7 @@ const (
 
 	// DemoteAfterProbation keeps demoting automatically after probation. Anyone who
 	// can trigger a denial in the workload can then switch its enforcement off.
+	// Use sparingly.
 	DemoteAfterProbation AfterProbationPolicy = "Demote"
 )
 

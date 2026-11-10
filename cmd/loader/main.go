@@ -21,9 +21,13 @@ limitations under the License.
 package main
 
 import (
+	"context"
+	"errors"
 	"flag"
+	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -35,9 +39,11 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	armadillov1alpha1 "github.com/tanchwa/armadillo/api/v1alpha1"
+	"github.com/tanchwa/armadillo/internal/loader"
 )
 
 var (
@@ -54,6 +60,7 @@ func main() {
 	var profileDir string
 	var securityFSDir string
 	var nodeName string
+	var gateAddr string
 	var metricsAddr string
 	var probeAddr string
 	flag.StringVar(&profileDir, "apparmor-profile-dir", "/var/lib/armadillo/profiles",
@@ -64,6 +71,9 @@ func main() {
 			"and used to read the kernel's hash of loaded profiles.")
 	flag.StringVar(&nodeName, "node-name", "",
 		"The name of the node this loader runs on. Set it from the downward API (spec.nodeName).")
+	flag.StringVar(&gateAddr, "gate-bind-address", ":9099",
+		"The address the startup gate endpoint binds to. The gate injected into pods asks it "+
+			"whether a profile is loaded on this node.")
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8080 for HTTP, or leave as 0 to disable the metrics service.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -100,13 +110,32 @@ func main() {
 		os.Exit(1)
 	}
 
-	// TODO: register the loader reconciler. It watches ManagedProfiles, writes
-	// profiles under profileDir, runs apparmor_parser -r, and records the
-	// loaded hash in this node's ProfileNodeStatus.
-	//
-	// Do not put +kubebuilder:rbac markers in loader code: controller-gen merges
-	// every marker under ./... into the manager's role. The loader's RBAC is
-	// hand-written in config/loader/role.yaml.
+	state := loader.NewState()
+	if err := (&loader.Reconciler{
+		Client:     mgr.GetClient(),
+		NodeName:   nodeName,
+		ProfileDir: profileDir,
+		Parser:     loader.ExecParser{SecurityFSDir: securityFSDir},
+		State:      state,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Failed to create controller", "controller", "loader")
+		os.Exit(1)
+	}
+
+	gateServer := &http.Server{Addr: gateAddr, Handler: state.Handler(), ReadHeaderTimeout: 5 * time.Second}
+	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+		go func() {
+			<-ctx.Done()
+			_ = gateServer.Close()
+		}()
+		if err := gateServer.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
+		return nil
+	})); err != nil {
+		setupLog.Error(err, "Failed to add gate endpoint")
+		os.Exit(1)
+	}
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "Failed to set up health check")

@@ -188,8 +188,9 @@ names are node-global. Raw profile text can:
 
 So the loader never loads the text as written:
 
-- It derives the profile name itself (for example
-  `armadillo-<namespace>-<name>`). The name in the text is ignored.
+- It derives the profile name itself: `armadillo.<namespace>.<name>`. A
+  namespace cannot contain a dot, so two namespaces can never produce the same
+  name. The name in the text is ignored.
 - It sets the mode flags itself. Complain or enforce is the controller's
   decision, never the file's.
 - It rejects attachments, more than one profile per file, and includes outside
@@ -227,9 +228,11 @@ two waits overlap instead of serializing.
 Injection is via the mutating admission webhook; the operator already knows
 which workloads have profiles under management.
 
-Implementation note: have the loader drop a sentinel file into a hostPath
-directory and let the gate poll for that, rather than reading
-`/sys/kernel/security/apparmor/profiles`, which is root-only.
+Implementation note (changed 2026-11-10): the gate asks the loader. The loader
+serves `GET /v1/loaded/<profile>` on a host port, and the gate's startup probe
+calls it through the node's IP. The earlier idea, a sentinel file in a hostPath
+directory, would have put a hostPath volume into every managed pod, which the
+"baseline" Pod Security Standard forbids.
 
 ### What not to do
 Letting the main container just fail and retry does eventually converge, but

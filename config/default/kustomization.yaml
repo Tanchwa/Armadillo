@@ -19,11 +19,12 @@ resources:
 - ../rbac
 - ../manager
 - ../loader
+- ../webhook-server
 # [WEBHOOK] To enable webhook, uncomment all the sections with [WEBHOOK] prefix including the one in
 # crd/kustomization.yaml
-#- ../webhook
+- ../webhook
 # [CERTMANAGER] To enable cert-manager, uncomment all sections with 'CERTMANAGER'. 'WEBHOOK' components are required.
-#- ../certmanager
+- ../certmanager
 # [PROMETHEUS] To enable prometheus monitor, uncomment all sections with 'PROMETHEUS'.
 #- ../prometheus
 # [METRICS] Expose the controller manager metrics service.
@@ -41,6 +42,7 @@ patches:
 - path: manager_metrics_patch.yaml
   target:
     kind: Deployment
+    name: controller-manager
 
 # Uncomment the patches line if you enable Metrics and CertManager
 # [METRICS-WITH-CERTS] To enable metrics protected with certManager, uncomment the following line.
@@ -51,13 +53,30 @@ patches:
 
 # [WEBHOOK] To enable webhook, uncomment all the sections with [WEBHOOK] prefix including the one in
 # crd/kustomization.yaml
-#- path: manager_webhook_patch.yaml
-#  target:
-#    kind: Deployment
+# The webhook runs in its own Deployment (config/webhook-server), not in the
+# manager, so the certificate is mounted there.
+- path: manager_webhook_patch.yaml
+  target:
+    kind: Deployment
+    name: webhook
+- path: webhook_namespace_selector_patch.yaml
+  target:
+    kind: MutatingWebhookConfiguration
 
 # [CERTMANAGER] To enable cert-manager, uncomment all sections with 'CERTMANAGER' prefix.
 # Uncomment the following replacements to add the cert-manager CA injection annotations
-#replacements:
+replacements:
+ # The gate injected into pods runs from the webhook's own image.
+ - source:
+     kind: Deployment
+     name: webhook
+     fieldPath: spec.template.spec.containers.[name=webhook].image
+   targets:
+     - select:
+         kind: Deployment
+         name: webhook
+       fieldPaths:
+         - spec.template.spec.containers.[name=webhook].env.[name=GATE_IMAGE].value
 # - source: # Uncomment the following block to enable certificates for metrics
 #     kind: Service
 #     version: v1
@@ -118,42 +137,42 @@ patches:
 #         index: 1
 #         create: true
 
-# - source: # Uncomment the following block if you have any webhook
-#     kind: Service
-#     version: v1
-#     name: webhook-service
-#     fieldPath: .metadata.name # Name of the service
-#   targets:
-#     - select:
-#         kind: Certificate
-#         group: cert-manager.io
-#         version: v1
-#         name: serving-cert
-#       fieldPaths:
-#         - .spec.dnsNames.0
-#         - .spec.dnsNames.1
-#       options:
-#         delimiter: '.'
-#         index: 0
-#         create: true
-# - source:
-#     kind: Service
-#     version: v1
-#     name: webhook-service
-#     fieldPath: .metadata.namespace # Namespace of the service
-#   targets:
-#     - select:
-#         kind: Certificate
-#         group: cert-manager.io
-#         version: v1
-#         name: serving-cert
-#       fieldPaths:
-#         - .spec.dnsNames.0
-#         - .spec.dnsNames.1
-#       options:
-#         delimiter: '.'
-#         index: 1
-#         create: true
+ - source: # Uncomment the following block if you have any webhook
+     kind: Service
+     version: v1
+     name: webhook-service
+     fieldPath: .metadata.name # Name of the service
+   targets:
+     - select:
+         kind: Certificate
+         group: cert-manager.io
+         version: v1
+         name: serving-cert
+       fieldPaths:
+         - .spec.dnsNames.0
+         - .spec.dnsNames.1
+       options:
+         delimiter: '.'
+         index: 0
+         create: true
+ - source:
+     kind: Service
+     version: v1
+     name: webhook-service
+     fieldPath: .metadata.namespace # Namespace of the service
+   targets:
+     - select:
+         kind: Certificate
+         group: cert-manager.io
+         version: v1
+         name: serving-cert
+       fieldPaths:
+         - .spec.dnsNames.0
+         - .spec.dnsNames.1
+       options:
+         delimiter: '.'
+         index: 1
+         create: true
 
 # - source: # Uncomment the following block if you have a ValidatingWebhook (--programmatic-validation)
 #     kind: Certificate
@@ -186,36 +205,36 @@ patches:
 #         index: 1
 #         create: true
 
-# - source: # Uncomment the following block if you have a DefaultingWebhook (--defaulting )
-#     kind: Certificate
-#     group: cert-manager.io
-#     version: v1
-#     name: serving-cert
-#     fieldPath: .metadata.namespace # Namespace of the certificate CR
-#   targets:
-#     - select:
-#         kind: MutatingWebhookConfiguration
-#       fieldPaths:
-#         - .metadata.annotations.[cert-manager.io/inject-ca-from]
-#       options:
-#         delimiter: '/'
-#         index: 0
-#         create: true
-# - source:
-#     kind: Certificate
-#     group: cert-manager.io
-#     version: v1
-#     name: serving-cert
-#     fieldPath: .metadata.name
-#   targets:
-#     - select:
-#         kind: MutatingWebhookConfiguration
-#       fieldPaths:
-#         - .metadata.annotations.[cert-manager.io/inject-ca-from]
-#       options:
-#         delimiter: '/'
-#         index: 1
-#         create: true
+ - source: # Uncomment the following block if you have a DefaultingWebhook (--defaulting )
+     kind: Certificate
+     group: cert-manager.io
+     version: v1
+     name: serving-cert
+     fieldPath: .metadata.namespace # Namespace of the certificate CR
+   targets:
+     - select:
+         kind: MutatingWebhookConfiguration
+       fieldPaths:
+         - .metadata.annotations.[cert-manager.io/inject-ca-from]
+       options:
+         delimiter: '/'
+         index: 0
+         create: true
+ - source:
+     kind: Certificate
+     group: cert-manager.io
+     version: v1
+     name: serving-cert
+     fieldPath: .metadata.name
+   targets:
+     - select:
+         kind: MutatingWebhookConfiguration
+       fieldPaths:
+         - .metadata.annotations.[cert-manager.io/inject-ca-from]
+       options:
+         delimiter: '/'
+         index: 1
+         create: true
 
 # - source: # Uncomment the following block if you have a ConversionWebhook (--conversion)
 #     kind: Certificate
