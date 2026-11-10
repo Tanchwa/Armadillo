@@ -1,0 +1,61 @@
+# RBAC cannot scope a DaemonSet's service account to one node, so every loader
+# holds the same cluster-wide write on ProfileNodeStatus. This policy narrows
+# it: a loader may only write objects whose spec.nodeName is the node its own
+# pod runs on. Without it, one compromised node could report "loaded" for every
+# other node.
+#
+# The node name comes from the pod-bound service account token
+# (authentication.kubernetes.io/node-name, Kubernetes 1.30+). On a cluster that
+# does not provide it, loader writes are denied rather than left unrestricted.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  labels:
+    app.kubernetes.io/name: armadillo
+    app.kubernetes.io/managed-by: kustomize
+  name: loader-node-restriction
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups:
+      - armadillo.andrewsutliff.com
+      apiVersions:
+      - "*"
+      operations:
+      - CREATE
+      - UPDATE
+      - DELETE
+      resources:
+      - profilenodestatuses
+      - profilenodestatuses/status
+  matchConditions:
+  # kustomize does not rewrite names inside expressions: this must match the
+  # namespace and namePrefix in config/default/kustomization.yaml.
+  - name: is-loader
+    expression: request.userInfo.username == 'system:serviceaccount:armadillo-system:armadillo-loader'
+  variables:
+  - name: target
+    expression: "request.operation == 'DELETE' ? oldObject : object"
+  validations:
+  - expression: >-
+      has(request.userInfo.extra) &&
+      'authentication.kubernetes.io/node-name' in request.userInfo.extra
+    message: The loader's service account token carries no node name, so its writes cannot be tied to a node.
+  - expression: >-
+      !has(request.userInfo.extra) ||
+      !('authentication.kubernetes.io/node-name' in request.userInfo.extra) ||
+      variables.target.spec.nodeName == request.userInfo.extra['authentication.kubernetes.io/node-name'][0]
+    message: A loader may only write the ProfileNodeStatus objects of the node it runs on.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  labels:
+    app.kubernetes.io/name: armadillo
+    app.kubernetes.io/managed-by: kustomize
+  name: loader-node-restriction
+spec:
+  policyName: loader-node-restriction
+  validationActions:
+  - Deny

@@ -4,6 +4,9 @@
 resources:
 - bases/armadillo.andrewsutliff.com_promotionpolicies.yaml
 - bases/armadillo.andrewsutliff.com_managedprofiles.yaml
+- bases/armadillo.andrewsutliff.com_demotionpolicies.yaml
+- bases/armadillo.andrewsutliff.com_profilebindings.yaml
+- bases/armadillo.andrewsutliff.com_profilenodestatuses.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

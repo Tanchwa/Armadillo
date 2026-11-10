@@ -192,6 +192,27 @@ func main() {
 		setupLog.Error(err, "Failed to create controller", "controller", "managedprofile")
 		os.Exit(1)
 	}
+	if err := (&controller.DemotionPolicyReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Failed to create controller", "controller", "demotionpolicy")
+		os.Exit(1)
+	}
+	if err := (&controller.ProfileBindingReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Failed to create controller", "controller", "profilebinding")
+		os.Exit(1)
+	}
+	if err := (&controller.ProfileNodeStatusReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Failed to create controller", "controller", "profilenodestatus")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

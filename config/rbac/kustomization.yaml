@@ -22,6 +22,15 @@ resources:
 # default, aiding admins in cluster management. Those roles are
 # not used by the armadillo itself. You can comment the following lines
 # if you do not want those helpers be installed with your Project.
+- profilenodestatus_admin_role.yaml
+- profilenodestatus_editor_role.yaml
+- profilenodestatus_viewer_role.yaml
+- profilebinding_admin_role.yaml
+- profilebinding_editor_role.yaml
+- profilebinding_viewer_role.yaml
+- demotionpolicy_admin_role.yaml
+- demotionpolicy_editor_role.yaml
+- demotionpolicy_viewer_role.yaml
 - managedprofile_admin_role.yaml
 - managedprofile_editor_role.yaml
 - managedprofile_viewer_role.yaml

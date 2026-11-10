@@ -71,7 +71,9 @@ spec:
                             type: string
                           values:
                             items:
+                              maxLength: 63
                               type: string
+                            maxItems: 16
                             type: array
                             x-kubernetes-list-type: atomic
                         required:
@@ -88,34 +90,18 @@ spec:
                         - message: Exists and DoesNotExist take no values
                           rule: '!(self.operator in [''Exists'',''DoesNotExist''])
                             || !has(self.values)'
+                      maxItems: 16
                       minItems: 1
                       type: array
                       x-kubernetes-list-type: atomic
                   required:
                   - requirements
                   type: object
+                maxItems: 16
                 minItems: 1
                 type: array
-              targetProfile:
-                description: TargetProfile is the name of the target ManagedProfile
-                  that this PromotionPolicy applies to
-                properties:
-                  apiVersion:
-                    description: API version of the referent
-                    type: string
-                  kind:
-                    description: Kind of the referent
-                    type: string
-                  name:
-                    description: Name of the referent
-                    type: string
-                  namespace:
-                    description: Namespace of the referent
-                    type: string
-                type: object
             required:
             - promotionRules
-            - targetProfile
             type: object
           status:
             description: status defines the observed state of PromotionPolicy

@@ -7,7 +7,10 @@ rules:
 - apiGroups:
   - armadillo.andrewsutliff.com
   resources:
+  - demotionpolicies
   - managedprofiles
+  - profilebindings
+  - profilenodestatuses
   - promotionpolicies
   verbs:
   - create
@@ -20,14 +23,20 @@ rules:
 - apiGroups:
   - armadillo.andrewsutliff.com
   resources:
+  - demotionpolicies/finalizers
   - managedprofiles/finalizers
+  - profilebindings/finalizers
+  - profilenodestatuses/finalizers
   - promotionpolicies/finalizers
   verbs:
   - update
 - apiGroups:
   - armadillo.andrewsutliff.com
   resources:
+  - demotionpolicies/status
   - managedprofiles/status
+  - profilebindings/status
+  - profilenodestatuses/status
   - promotionpolicies/status
   verbs:
   - get
