@@ -31,14 +31,11 @@ type PromotionPolicySpec struct {
 	// The following markers will use OpenAPI v3 schema to validate the value
 	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
 
-	// TargetProfile is the name of the target ManagedProfile that this PromotionPolicy applies to
-	// +required
-	TargetProfile *CrossVersionObjectReference `json:"targetProfile,omitempty"`
-
 	// PromotionRules is a list of promotion rules that define the promotion policy
 	// Proting referes to promotion from Apparmor complain mode to Apparmor enforce mode, or from a lower security level to a higher security level
 	// +required
 	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=16
 	PromotionRules []PromotionRule `json:"promotionRules,omitempty"`
 }
 
@@ -47,6 +44,7 @@ type PromotionRule struct {
 	// +required
 	// +listType=atomic
 	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=16
 	Requirements []PromotionRequirement `json:"requirements,omitempty"`
 }
 
@@ -60,6 +58,8 @@ type PromotionRequirement struct {
 	Operator PromotionOperator `json:"operator,omitempty"`
 	// +optional
 	// +listType=atomic
+	// +kubebuilder:validation:MaxItems=16
+	// +kubebuilder:validation:items:MaxLength=63
 	Values []string `json:"values,omitempty"`
 }
 
@@ -71,19 +71,6 @@ type PromotionOperator string
 
 type ApplyBehavior struct {
 	// +optional
-}
-
-type CrossVersionObjectReference struct {
-	// Kind of the referent
-	Kind string `json:"kind,omitempty"`
-	// Name of the referent
-	Name string `json:"name,omitempty"`
-	// API version of the referent
-	// +optional
-	APIVersion string `json:"apiVersion,omitempty"`
-	// Namespace of the referent
-	// +optional
-	Namespace string `json:"namespace,omitempty"`
 }
 
 // PromotionPolicyStatus defines the observed state of PromotionPolicy.

@@ -2,4 +2,7 @@
 resources:
 - armadillo_v1alpha1_promotionpolicy.yaml
 - armadillo_v1alpha1_managedprofile.yaml
+- armadillo_v1alpha1_demotionpolicy.yaml
+- armadillo_v1alpha1_profilebinding.yaml
+- armadillo_v1alpha1_profilenodestatus.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

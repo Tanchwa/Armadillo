@@ -27,4 +27,30 @@ resources:
   kind: ManagedProfile
   path: github.com/tanchwa/armadillo/api/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: andrewsutliff.com
+  group: armadillo
+  kind: DemotionPolicy
+  path: github.com/tanchwa/armadillo/api/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: andrewsutliff.com
+  group: armadillo
+  kind: ProfileBinding
+  path: github.com/tanchwa/armadillo/api/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+  controller: true
+  domain: andrewsutliff.com
+  group: armadillo
+  kind: ProfileNodeStatus
+  path: github.com/tanchwa/armadillo/api/v1alpha1
+  version: v1alpha1
 version: "3"

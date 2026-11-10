@@ -83,6 +83,15 @@ on one node is evidence the profile is wrong for the workload, not for the node.
 
 **Asymmetry to encode: promote slowly, demote everywhere at once.**
 
+**Changed 2026-11-10: automatic demotion is limited to probation.** A blocked
+attack and a too-narrow profile produce the same `DENIED`. If any denial
+demoted forever, an attacker inside a confined pod could trigger one denial,
+wait for the profile to drop to complain, and proceed. So a `DemotionPolicy`
+defines a probation after each promotion, measured in observed events (deploys,
+restarts, business cycles) rather than elapsed time. During probation a denial
+demotes as above. After it, the default is to alert and leave demotion to a
+human; demoting automatically after probation is an explicit opt-in.
+
 ## 5. Promotion gating — do not use a silence timer
 
 This is the subtlest part of the design and the easiest to get wrong.
@@ -149,10 +158,45 @@ This gives the controller real coverage data, lets affinity require the
 *current* revision rather than mere presence, and answers the question you
 will actually ask during an incident: what policy is on that node right now?
 
+**Changed 2026-11-10: the hash lives in `ProfileNodeStatus`, not a node label.**
+The invariant stands — every node reports the hash of what it loaded — but the
+loader writes it to `ProfileNodeStatus.status.loadedHash`. Labelling nodes
+needs `patch` on `nodes`, and a DaemonSet's service account cannot be scoped to
+one node, so a single compromised node could cordon or relabel every other
+one. The label's other use, affinity on the current revision, went away when
+§8 chose the startup gate over affinity. An admission policy
+(`config/loader/node_restriction.yaml`) limits each loader to the
+`ProfileNodeStatus` objects of its own node.
+
 ### Stage the rollout even though the decision is global
 A reload applies instantly to running processes — which is exactly why a
 simultaneous cluster-wide enforce flip is dangerous. Decide globally, roll out
 by node, pause on denials.
+
+### Profile text is untrusted input
+Creating a `ManagedProfile` means authoring kernel policy for every node. The
+loader runs as root and loads whatever text the profile holds, and AppArmor
+names are node-global. Raw profile text can:
+
+- replace the runtime's default profile (`cri-containerd.apparmor.d`) or
+  another namespace's profile by reusing its name
+- attach to host binaries — a profile named `/usr/bin/kubelet` in enforce mode
+  takes the node down
+- `include` arbitrary host files, which the parser reads as root
+- be an allow-everything profile, which is weaker than the runtime default yet
+  still passes Pod Security "baseline" because it is a `Localhost` profile
+
+So the loader never loads the text as written:
+
+- It derives the profile name itself (for example
+  `armadillo-<namespace>-<name>`). The name in the text is ignored.
+- It sets the mode flags itself. Complain or enforce is the controller's
+  decision, never the file's.
+- It rejects attachments, more than one profile per file, and includes outside
+  an allowlist.
+
+Create rights on `ManagedProfile` are privileged and should be granted like
+the right to change node configuration, not like the right to deploy an app.
 
 ## 8. New nodes and the scheduling race
 

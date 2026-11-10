@@ -58,11 +58,10 @@ type PolicyReferenceObject struct {
 	// +optional
 	Kind string `json:"kind"`
 	// Name is the name of the PromotionPolicy resource.
+	// The policy must be in the same namespace as the ManagedProfile: a cross-namespace
+	// reference would let one namespace promote or demote another namespace's profile.
 	// +required
 	Name string `json:"name"`
-	// Namespace is the namespace of the PromotionPolicy resource.
-	// +optional
-	Namespace string `json:"namespace,omitempty"`
 }
 
 type GitOptions struct {
@@ -123,7 +122,27 @@ type ManagedProfileStatus struct {
 	// EnforcementLevel indicates that the enforcement level of the ManagedProfile is set to "Enforce" or "Inform".
 	// +optional
 	EnforcementLevel string `json:"enforcementLevel,omitempty"`
+
+	// Probation indicates whether the profile is on probation after a promotion,
+	// as defined by the probation of its DemotionPolicy. It is empty when the profile
+	// has not been promoted or has no DemotionPolicy.
+	// +optional
+	Probation ProbationState `json:"probation,omitempty"`
 }
+
+// ProbationState describes where a promoted profile is in its probation.
+// +kubebuilder:validation:Enum=Active;Completed
+type ProbationState string
+
+const (
+	// ProbationActive means the profile is on probation: a matching demotion rule
+	// demotes it automatically.
+	ProbationActive ProbationState = "Active"
+
+	// ProbationCompleted means the profile has left probation: a matching demotion
+	// rule triggers the DemotionPolicy's afterProbation policy.
+	ProbationCompleted ProbationState = "Completed"
+)
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
