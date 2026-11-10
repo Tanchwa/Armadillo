@@ -1,0 +1,4 @@
+resources:
+- rbac.yaml
+- node_restriction.yaml
+- daemonset.yaml

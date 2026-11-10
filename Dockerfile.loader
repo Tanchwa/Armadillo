@@ -1,0 +1,28 @@
+# Build the loader binary
+FROM golang:1.26 AS builder
+ARG TARGETOS
+ARG TARGETARCH
+
+WORKDIR /workspace
+COPY go.mod go.mod
+COPY go.sum go.sum
+RUN go mod download
+
+COPY . .
+
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o loader cmd/loader/main.go
+
+# Not distroless like the manager: the loader runs apparmor_parser, which ships
+# in the apparmor package. The parser here must support the profile syntax and
+# the kernel features of the nodes it loads onto.
+# Both the base image and the parser are pinned: this image runs as root with
+# CAP_MAC_ADMIN on every node, so what goes into it should not change unless
+# someone changes it here.
+FROM debian:bookworm-slim@sha256:734a72b3d6142a71993b4bc580ca01d8ca687f77a2c422d96a961d3376b179bc
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends apparmor=3.0.8-3 \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /
+COPY --from=builder /workspace/loader .
+
+ENTRYPOINT ["/loader"]

@@ -1,0 +1,106 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: loader
+  namespace: system
+  labels:
+    app.kubernetes.io/name: armadillo
+    app.kubernetes.io/component: loader
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: armadillo
+      app.kubernetes.io/component: loader
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: loader
+      labels:
+        app.kubernetes.io/name: armadillo
+        app.kubernetes.io/component: loader
+    spec:
+      serviceAccountName: loader
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      # A node without a loader cannot run any bound pod: they fail with
+      # CreateContainerError. Run everywhere, including tainted nodes.
+      priorityClassName: system-node-critical
+      tolerations:
+      - operator: Exists
+      nodeSelector:
+        kubernetes.io/os: linux
+      containers:
+      - name: loader
+        image: loader:latest
+        args:
+        - --node-name=$(NODE_NAME)
+        - --apparmor-profile-dir=/var/lib/armadillo/profiles
+        - --apparmor-securityfs-dir=/sys/kernel/security/apparmor
+        - --health-probe-bind-address=:8081
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        securityContext:
+          runAsUser: 0
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          # The runtime's default AppArmor profile denies loading policy.
+          appArmorProfile:
+            type: Unconfined
+          capabilities:
+            drop:
+            - ALL
+            add:
+            # Loading and replacing AppArmor policy.
+            - MAC_ADMIN
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: 200m
+            memory: 128Mi
+          requests:
+            cpu: 10m
+            memory: 64Mi
+        volumeMounts:
+        # Must match --apparmor-profile-dir. A directory of its own, not the
+        # host's /etc/apparmor.d: the loader must not be able to overwrite the
+        # host's profiles. Abstractions and tunables come from the image.
+        - name: apparmor-profiles
+          mountPath: /var/lib/armadillo/profiles
+        # Must match --apparmor-securityfs-dir. Only the apparmor directory,
+        # not the rest of securityfs. libapparmor cannot find it by itself when
+        # mounted like this, so apparmor_parser must be run with
+        # --subdomainfs set to this path.
+        - name: securityfs
+          mountPath: /sys/kernel/security/apparmor
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: apparmor-profiles
+        hostPath:
+          path: /var/lib/armadillo/profiles
+          type: DirectoryOrCreate
+      - name: securityfs
+        hostPath:
+          path: /sys/kernel/security/apparmor
+          type: Directory
+      - name: tmp
+        emptyDir: {}
+      terminationGracePeriodSeconds: 10
