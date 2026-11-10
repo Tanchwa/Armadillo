@@ -23,4 +23,4 @@ jobs:
         docker build . --file Dockerfile.gate --tag tanchwa/armadillo-gate:latest && \
         docker build . --file Dockerfile.loader --tag tanchwa/armadillo-loader:latest
     - name: Push the Docker image
-      run: docker login -u tanchwa -p ${{ secrets.DOCKER_TOKEN }} && docker push tanchwa/todoist-reclaim-webhook:latest
+      run: docker login -u tanchwa -p ${{ secrets.DOCKER_TOKEN }} && docker push tanchwa/armadillo-manager:latest && docker push tanchwa/armadillo-gate:latest && docker push tanchwa/armadillo-loader:latest
