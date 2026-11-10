@@ -54,7 +54,13 @@ var _ = Describe("PromotionPolicy Controller", func() {
 						Name:      resourceName,
 						Namespace: resourceNamespace,
 					},
-					// TODO(user): Specify other spec details if needed.
+					Spec: armadillov1alpha1.PromotionPolicySpec{
+						PromotionRules: []armadillov1alpha1.PromotionRule{{
+							Requirements: []armadillov1alpha1.PromotionRequirement{{
+								Key: "DeploysObserved", Operator: "Gt", Values: []string{"0"},
+							}},
+						}},
+					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}

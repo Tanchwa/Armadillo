@@ -41,6 +41,15 @@ spec:
         - --apparmor-profile-dir=/var/lib/armadillo/profiles
         - --apparmor-securityfs-dir=/sys/kernel/security/apparmor
         - --health-probe-bind-address=:8081
+        - --gate-bind-address=:9099
+        ports:
+        # The startup gate injected into pods asks this endpoint, through the
+        # node's IP, whether a profile is loaded here. The webhook's
+        # --loader-port must match hostPort.
+        - name: gate
+          containerPort: 9099
+          hostPort: 9099
+          protocol: TCP
         env:
         - name: NODE_NAME
           valueFrom:

@@ -25,6 +25,16 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+const (
+	// SecretTypeLabel must be set on every Secret that Armadillo reads. The manager
+	// only sees Secrets that carry it, so it never caches or reads any other Secret.
+	SecretTypeLabel = "armadillo.andrewsutliff.com/secret-type"
+
+	// SecretTypeRepository marks a Secret that holds a git repository's "url" and,
+	// for a private repository, "username" and "password".
+	SecretTypeRepository = "repository"
+)
+
 // ManagedProfileSpec defines the desired state of ManagedProfile
 type ManagedProfileSpec struct {
 	// PromotionPolicyRef is a reference to the PromotionPolicy resource that defines the promotion lifecycle for this ManagedProfile.
@@ -78,6 +88,15 @@ type GitOptions struct {
 	// We use LocalObjectReference here to avoid the need for a full Secret reference, since we want to restrict to secrets in the same namespace as the ManagedProfile.
 	// +required
 	RepositorySecret k8s.LocalObjectReference `json:"repositorySecret,omitempty"`
+	// Path is the path of the profile file within the repository.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=1024
+	Path string `json:"path,omitempty"`
+	// Branch is the branch to read the profile from. Empty means the repository's default branch.
+	// +optional
+	// +kubebuilder:validation:MaxLength=255
+	Branch string `json:"branch,omitempty"`
 }
 
 // ManagedProfileStatus defines the observed state of ManagedProfile.
@@ -128,6 +147,29 @@ type ManagedProfileStatus struct {
 	// has not been promoted or has no DemotionPolicy.
 	// +optional
 	Probation ProbationState `json:"probation,omitempty"`
+
+	// Profile is the profile the manager last fetched from git and validated.
+	// Loaders load this and nothing else, so they never need repository credentials.
+	// +optional
+	Profile *PublishedProfile `json:"profile,omitempty"`
+}
+
+// PublishedProfile is a profile as fetched from git.
+type PublishedProfile struct {
+	// Content is the profile text exactly as committed. The loader does not load it
+	// as written: it sets the profile name and mode itself.
+	// +required
+	// +kubebuilder:validation:MaxLength=262144
+	Content string `json:"content,omitempty"`
+	// Hash is the hash of content, as "sha256:<hex>". A loader reports this value
+	// back in ProfileNodeStatus once it has loaded the profile.
+	// +required
+	// +kubebuilder:validation:MaxLength=128
+	Hash string `json:"hash,omitempty"`
+	// Revision is the git commit the content was read from.
+	// +optional
+	// +kubebuilder:validation:MaxLength=64
+	Revision string `json:"revision,omitempty"`
 }
 
 // ProbationState describes where a promoted profile is in its probation.
