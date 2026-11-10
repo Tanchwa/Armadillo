@@ -54,7 +54,7 @@ type ManagedProfileSpec struct {
 
 	// ImageBuilderOptions defines the image builder options to use to use to
 	// reincorperaote changes of the managed profile into the VM image.
-	// not implimented yet
+	// not implemented yet
 	// +optional
 	// +kubebuilder:validation:AtLeastOneOf=GitOptions,ImageBuilderOptions
 	// ImageBuilderOptions *ImageBuilderOptions `json:"imageBuilderOptions,omitempty"`
@@ -130,7 +130,7 @@ type ManagedProfileStatus struct {
 	// +optional
 	Installing string `json:"processing,omitempty"`
 
-	// profile has passed the promotion threshold and is in the pocess of being promoted and commited back to the source repository.
+	// profile has passed the promotion threshold and is in the pocess of being promoted and committed back to the source repository.
 	// +optional
 	Promoting string `json:"promoting,omitempty"`
 
