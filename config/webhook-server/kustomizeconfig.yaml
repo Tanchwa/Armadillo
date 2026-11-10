@@ -1,0 +1,6 @@
+# Tells kustomize's image transformer that environment variable values in a
+# Deployment may hold image names. It only rewrites a value that matches an
+# image named under "images:", which is how GATE_IMAGE follows GATE_IMG.
+images:
+- path: spec/template/spec/containers/env/value
+  kind: Deployment

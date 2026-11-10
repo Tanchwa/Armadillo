@@ -1,0 +1,23 @@
+# Build the gate binary
+FROM golang:1.26 AS builder
+ARG TARGETOS
+ARG TARGETARCH
+
+WORKDIR /workspace
+COPY go.mod go.mod
+COPY go.sum go.sum
+RUN go mod download
+
+COPY . .
+
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -ldflags="-s -w" -o gate cmd/gate/main.go
+
+# Nothing but the binary. The gate is pulled onto every node that runs a
+# managed pod and has to start before anything else in that pod, so on a
+# freshly scaled-out node its size is startup latency. It speaks plain HTTP to
+# the loader on the same node and needs no CA certificates, shell or libc.
+FROM scratch
+COPY --from=builder /workspace/gate /gate
+USER 65532:65532
+
+ENTRYPOINT ["/gate"]
