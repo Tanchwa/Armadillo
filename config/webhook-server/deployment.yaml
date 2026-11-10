@@ -39,7 +39,7 @@ spec:
                   app.kubernetes.io/component: webhook
       containers:
       - name: webhook
-        # The same image as the manager: it holds /manager, /webhook and /gate.
+        # The same image as the manager: it holds /manager and /webhook.
         image: controller:latest
         command:
         - /webhook
@@ -48,11 +48,11 @@ spec:
         # Must match the hostPort of the loader DaemonSet.
         - --loader-port=9099
         env:
-        # The gate injected into pods runs from this same image. kustomize does
-        # not rewrite image names outside "image:" fields, so
-        # config/default/kustomization.yaml copies the image above into here.
+        # The image of the gate injected into pods. kustomizeconfig.yaml makes
+        # kustomize treat this value as an image name, so "make deploy" replaces
+        # it with GATE_IMG the same way it replaces "image:" fields.
         - name: GATE_IMAGE
-          value: controller:latest
+          value: gate:latest
         ports:
         - containerPort: 8081
           name: health

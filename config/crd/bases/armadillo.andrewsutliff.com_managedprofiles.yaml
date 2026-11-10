@@ -251,7 +251,7 @@ spec:
                 type: object
               promoting:
                 description: profile has passed the promotion threshold and is in
-                  the pocess of being promoted and commited back to the source repository.
+                  the pocess of being promoted and committed back to the source repository.
                 type: string
             type: object
         required:

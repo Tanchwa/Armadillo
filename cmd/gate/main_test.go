@@ -23,10 +23,13 @@ import (
 	"testing"
 )
 
+// loadedProfile is the one profile the fake loader reports as loaded.
+const loadedProfile = "armadillo.shop.myapp"
+
 func TestCheck(t *testing.T) {
-	// Stands in for the loader: only "armadillo.shop.myapp" is loaded.
+	// Stands in for the loader: only loadedProfile is loaded.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/loaded/armadillo.shop.myapp" {
+		if r.URL.Path != "/v1/loaded/"+loadedProfile {
 			http.NotFound(w, r)
 		}
 	}))
@@ -36,17 +39,17 @@ func TestCheck(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := check(host, port, []string{"armadillo.shop.myapp"}); err != nil {
+	if err := check(host, port, []string{loadedProfile}); err != nil {
 		t.Errorf("loaded profile: %v", err)
 	}
-	if err := check(host, port, []string{"armadillo.shop.myapp", "armadillo.shop.other"}); err == nil {
+	if err := check(host, port, []string{loadedProfile, "armadillo.shop.other"}); err == nil {
 		t.Error("passed although one profile is not loaded")
 	}
-	if err := check("", port, []string{"armadillo.shop.myapp"}); err == nil {
+	if err := check("", port, []string{loadedProfile}); err == nil {
 		t.Error("passed without a loader host")
 	}
 	srv.Close()
-	if err := check(host, port, []string{"armadillo.shop.myapp"}); err == nil {
+	if err := check(host, port, []string{loadedProfile}); err == nil {
 		t.Error("passed although the loader is unreachable")
 	}
 }

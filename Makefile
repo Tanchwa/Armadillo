@@ -2,6 +2,9 @@
 IMG ?= controller:latest
 # Image URL for the loader DaemonSet.
 LOADER_IMG ?= loader:latest
+# Image URL for the startup gate the webhook injects into application pods.
+# Every opted-in namespace must be able to pull it.
+GATE_IMG ?= gate:latest
 # YEAR defines the year value used for substituting the YEAR placeholder in the boilerplate header.
 YEAR ?= $(shell date +%Y)
 
@@ -128,11 +131,13 @@ run: manifests generate fmt vet ## Run a controller from your host.
 docker-build: ## Build docker image with the manager.
 	$(CONTAINER_TOOL) build -t ${IMG} .
 	$(CONTAINER_TOOL) build -t ${LOADER_IMG} -f Dockerfile.loader .
+	$(CONTAINER_TOOL) build -t ${GATE_IMG} -f Dockerfile.gate .
 
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.
 	$(CONTAINER_TOOL) push ${IMG}
 	$(CONTAINER_TOOL) push ${LOADER_IMG}
+	$(CONTAINER_TOOL) push ${GATE_IMG}
 
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
 # architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
@@ -155,7 +160,7 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 build-installer: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
 	mkdir -p dist
 	cd config/manager && "$(KUSTOMIZE)" edit set image controller=${IMG}
-	cd config/webhook-server && "$(KUSTOMIZE)" edit set image controller=${IMG}
+	cd config/webhook-server && "$(KUSTOMIZE)" edit set image controller=${IMG} gate=${GATE_IMG}
 	cd config/loader && "$(KUSTOMIZE)" edit set image loader=${LOADER_IMG}
 	"$(KUSTOMIZE)" build config/default > dist/install.yaml
 
@@ -178,7 +183,7 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 .PHONY: deploy
 deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	cd config/manager && "$(KUSTOMIZE)" edit set image controller=${IMG}
-	cd config/webhook-server && "$(KUSTOMIZE)" edit set image controller=${IMG}
+	cd config/webhook-server && "$(KUSTOMIZE)" edit set image controller=${IMG} gate=${GATE_IMG}
 	cd config/loader && "$(KUSTOMIZE)" edit set image loader=${LOADER_IMG}
 	"$(KUSTOMIZE)" build config/default | "$(KUBECTL)" apply -f -
 

@@ -37,6 +37,9 @@ import (
 	"github.com/tanchwa/armadillo/internal/apparmor"
 )
 
+// profileName is the name the test ManagedProfile shop/myapp is loaded under.
+const profileName = "armadillo.shop.myapp"
+
 const profileText = "profile myapp flags=(complain) {\n  /tmp/x r,\n}\n"
 
 // fakeParser records the text of every file it is asked to load.
@@ -104,7 +107,7 @@ func TestLoadsInComplainThenEnforce(t *testing.T) {
 		pns.Status.Mode != "Complain" || !meta.IsStatusConditionTrue(pns.Status.Conditions, ConditionLoaded) {
 		t.Errorf("status after first load: %+v %+v", pns.Spec, pns.Status)
 	}
-	onDisk, err := os.ReadFile(filepath.Join(r.ProfileDir, "armadillo.shop.myapp"))
+	onDisk, err := os.ReadFile(filepath.Join(r.ProfileDir, profileName))
 	if err != nil || string(onDisk) != parser.loads[0] {
 		t.Errorf("file on disk differs from what was loaded: %v", err)
 	}
@@ -122,7 +125,7 @@ func TestLoadsInComplainThenEnforce(t *testing.T) {
 	if err := c.Get(ctx, req.NamespacedName, &mp); err != nil {
 		t.Fatal(err)
 	}
-	mp.Status.EnforcementLevel = "Enforce"
+	mp.Status.EnforcementLevel = string(apparmor.Enforce)
 	if err := c.Status().Update(ctx, &mp); err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +136,7 @@ func TestLoadsInComplainThenEnforce(t *testing.T) {
 		!strings.Contains(parser.loads[1], "profile armadillo.shop.myapp flags=(attach_disconnected,mediate_deleted) {") {
 		t.Fatalf("loads after promotion: %q", parser.loads)
 	}
-	if got := nodeStatus(t, c).Status.Mode; got != "Enforce" {
+	if got := nodeStatus(t, c).Status.Mode; got != armadillov1alpha1.ProfileMode(apparmor.Enforce) {
 		t.Errorf("mode after promotion: %s", got)
 	}
 }
@@ -151,7 +154,7 @@ func TestInvalidProfileIsNotLoaded(t *testing.T) {
 	if meta.IsStatusConditionTrue(pns.Status.Conditions, ConditionLoaded) || pns.Status.LoadedHash != "" {
 		t.Errorf("status claims the profile is loaded: %+v", pns.Status)
 	}
-	if _, ok := r.State.get("armadillo.shop.myapp"); ok {
+	if _, ok := r.State.get(profileName); ok {
 		t.Error("state claims the profile is loaded")
 	}
 }
@@ -178,14 +181,14 @@ func TestParserFailureKeepsPreviousFile(t *testing.T) {
 	if _, err := r.Reconcile(ctx, req); err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(r.ProfileDir, "armadillo.shop.myapp")
+	path := filepath.Join(r.ProfileDir, profileName)
 	before, _ := os.ReadFile(path)
 
 	var mp armadillov1alpha1.ManagedProfile
 	if err := c.Get(ctx, req.NamespacedName, &mp); err != nil {
 		t.Fatal(err)
 	}
-	mp.Status.EnforcementLevel = "Enforce"
+	mp.Status.EnforcementLevel = string(apparmor.Enforce)
 	if err := c.Status().Update(ctx, &mp); err != nil {
 		t.Fatal(err)
 	}
@@ -222,7 +225,7 @@ func TestDeletedProfileIsUnloaded(t *testing.T) {
 	if parser.removes != 1 {
 		t.Errorf("removes: %d", parser.removes)
 	}
-	if _, err := os.Stat(filepath.Join(r.ProfileDir, "armadillo.shop.myapp")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(r.ProfileDir, profileName)); !os.IsNotExist(err) {
 		t.Errorf("profile file still on disk: %v", err)
 	}
 	var pns armadillov1alpha1.ProfileNodeStatus
@@ -245,13 +248,13 @@ func TestGateEndpoint(t *testing.T) {
 		_ = resp.Body.Close()
 		return resp.StatusCode
 	}
-	if got := get("/v1/loaded/armadillo.shop.myapp"); got != http.StatusNotFound {
+	if got := get("/v1/loaded/" + profileName); got != http.StatusNotFound {
 		t.Errorf("before load: %d", got)
 	}
 	if _, err := r.Reconcile(ctx, req); err != nil {
 		t.Fatal(err)
 	}
-	if got := get("/v1/loaded/armadillo.shop.myapp"); got != http.StatusOK {
+	if got := get("/v1/loaded/" + profileName); got != http.StatusOK {
 		t.Errorf("after load: %d", got)
 	}
 	if got := get("/v1/loaded/armadillo.shop.other"); got != http.StatusNotFound {

@@ -30,6 +30,8 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
+const profilePath = "apparmor/myapp.profile"
+
 func TestCheckURL(t *testing.T) {
 	f := GitFetcher{AllowedHosts: []string{"github.com"}}
 	for url, ok := range map[string]bool{
@@ -52,14 +54,14 @@ func TestCheckURL(t *testing.T) {
 
 func TestCheckPath(t *testing.T) {
 	for p, ok := range map[string]bool{
-		"apparmor/myapp.profile": true,
-		"myapp.profile":          true,
-		"":                       false,
-		"/etc/shadow":            false,
-		"../other":               false,
-		"a/../../b":              false,
-		"a//b":                   false,
-		"./a":                    false,
+		profilePath:     true,
+		"myapp.profile": true,
+		"":              false,
+		"/etc/shadow":   false,
+		"../other":      false,
+		"a/../../b":     false,
+		"a//b":          false,
+		"./a":           false,
 	} {
 		if err := CheckPath(p); (err == nil) != ok {
 			t.Errorf("%q: allowed=%v", p, err == nil)
@@ -102,11 +104,11 @@ func TestCloneReadsFileAtBranchTip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	commit(t, repo, dir, "apparmor/myapp.profile", "first\n")
-	second := commit(t, repo, dir, "apparmor/myapp.profile", "second\n")
+	commit(t, repo, dir, profilePath, "first\n")
+	second := commit(t, repo, dir, profilePath, "second\n")
 
 	f := GitFetcher{MaxBytes: 1024}
-	content, revision, err := f.clone(ctx, Repo{URL: dir, Path: "apparmor/myapp.profile"}, nil)
+	content, revision, err := f.clone(ctx, Repo{URL: dir, Path: profilePath}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +123,7 @@ func TestCloneReadsFileAtBranchTip(t *testing.T) {
 		t.Error("a path outside the repository was not an error")
 	}
 	small := GitFetcher{MaxBytes: 3}
-	if _, _, err := small.clone(ctx, Repo{URL: dir, Path: "apparmor/myapp.profile"}, nil); err == nil ||
+	if _, _, err := small.clone(ctx, Repo{URL: dir, Path: profilePath}, nil); err == nil ||
 		!strings.Contains(err.Error(), "larger than") {
 		t.Errorf("an oversized file was not rejected: %v", err)
 	}

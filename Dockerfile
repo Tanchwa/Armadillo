@@ -20,10 +20,10 @@ COPY . .
 # the docker BUILDPLATFORM arg will be linux/arm64 when for Apple x86 it will be linux/amd64. Therefore,
 # by leaving it empty we can ensure that the container and binary shipped on it will have the same platform.
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o manager cmd/main.go
-# The webhook and the startup gate ship in the same image as the manager. The
-# gate is injected into application pods from this image, so it stays distroless.
+# The webhook ships in the same image as the manager: both only ever run in
+# Armadillo's own namespace. The startup gate does not: it is injected into
+# application pods, so it has an image of its own (Dockerfile.gate).
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o webhook cmd/webhook/main.go
-RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o gate cmd/gate/main.go
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
@@ -31,7 +31,6 @@ FROM gcr.io/distroless/static:nonroot
 WORKDIR /
 COPY --from=builder /workspace/manager .
 COPY --from=builder /workspace/webhook .
-COPY --from=builder /workspace/gate .
 USER 65532:65532
 
 ENTRYPOINT ["/manager"]

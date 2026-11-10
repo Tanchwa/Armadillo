@@ -144,7 +144,7 @@ func (r *ManagedProfileReconciler) fetch(
 	url := string(secret.Data["url"])
 	if url == "" {
 		// Error capitilization rule ignored because of Kubernetes naming conventions
-		return "", "", "InvalidSecret", fmt.Errorf("Secret %q has no \"url\" key", key.Name)
+		return "", "", "InvalidSecret", fmt.Errorf("secret %q has no \"url\" key", key.Name)
 	}
 
 	fetchCtx, cancel := context.WithTimeout(ctx, time.Minute)

@@ -41,7 +41,31 @@ type ProfileBindingSpec struct {
 	// +listType=set
 	// +kubebuilder:validation:items:MaxLength=63
 	Containers []string `json:"containers,omitempty"`
+
+	// StartupGate controls whether the selected pods get the startup gate.
+	// +optional
+	// +default="Enabled"
+	StartupGate StartupGatePolicy `json:"startupGate,omitempty"`
 }
+
+// StartupGatePolicy describes whether pods wait for their profile before starting.
+// Only one of the following policies may be specified.
+// If none of the following policies is specified, the default one
+// is StartupGateEnabled.
+// +kubebuilder:validation:Enum=Enabled;Disabled
+type StartupGatePolicy string
+
+const (
+	// StartupGateEnabled injects a sidecar that holds the pod's containers back
+	// until the profile is loaded on the pod's node. The pod waits instead of
+	// failing when it lands on a new node, or when the profile is new.
+	StartupGateEnabled StartupGatePolicy = "Enabled"
+
+	// StartupGateDisabled injects no sidecar. A pod that starts on a node where
+	// the profile is not loaded yet fails with CreateContainerError and is
+	// retried by the kubelet with increasing backoff.
+	StartupGateDisabled StartupGatePolicy = "Disabled"
+)
 
 // ProfileBindingStatus defines the observed state of ProfileBinding.
 type ProfileBindingStatus struct {

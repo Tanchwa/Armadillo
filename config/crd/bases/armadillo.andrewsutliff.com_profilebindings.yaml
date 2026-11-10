@@ -110,6 +110,14 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+              startupGate:
+                default: Enabled
+                description: StartupGate controls whether the selected pods get the
+                  startup gate.
+                enum:
+                - Enabled
+                - Disabled
+                type: string
             required:
             - podSelector
             - profileRef

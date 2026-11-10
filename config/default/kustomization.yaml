@@ -66,17 +66,6 @@ patches:
 # [CERTMANAGER] To enable cert-manager, uncomment all sections with 'CERTMANAGER' prefix.
 # Uncomment the following replacements to add the cert-manager CA injection annotations
 replacements:
- # The gate injected into pods runs from the webhook's own image.
- - source:
-     kind: Deployment
-     name: webhook
-     fieldPath: spec.template.spec.containers.[name=webhook].image
-   targets:
-     - select:
-         kind: Deployment
-         name: webhook
-       fieldPaths:
-         - spec.template.spec.containers.[name=webhook].env.[name=GATE_IMAGE].value
 # - source: # Uncomment the following block to enable certificates for metrics
 #     kind: Service
 #     version: v1

@@ -44,6 +44,9 @@ const (
 	// GateContainerName is the name of the injected startup gate.
 	GateContainerName = "armadillo-gate"
 
+	// gateBinary is the path of the gate in the gate image.
+	gateBinary = "/gate"
+
 	// The annotation Kubernetes used for AppArmor before the securityContext field.
 	legacyAnnotationPrefix = "container.apparmor.security.beta.kubernetes.io/"
 )
@@ -97,7 +100,8 @@ func (d *PodCustomDefaulter) Default(ctx context.Context, pod *corev1.Pod) error
 	})
 
 	boundBy := map[string]string{} // container name -> binding name
-	var profiles []string
+	var profiles []string          // every profile the pod is bound to
+	var gated []string             // the ones the pod must wait for
 	for _, binding := range bindings.Items {
 		// A nil selector selects nothing; an empty one selects every pod.
 		selector, err := metav1.LabelSelectorAsSelector(binding.Spec.PodSelector)
@@ -133,8 +137,16 @@ func (d *PodCustomDefaulter) Default(ctx context.Context, pod *corev1.Pod) error
 				bound = true
 			}
 		}
-		if bound && !slices.Contains(profiles, profile) {
+		if !bound {
+			continue
+		}
+		if !slices.Contains(profiles, profile) {
 			profiles = append(profiles, profile)
+		}
+		// Anything but an explicit Disabled gates: a binding read from a cache
+		// that predates the field has it empty.
+		if binding.Spec.StartupGate != armadillov1alpha1.StartupGateDisabled && !slices.Contains(gated, profile) {
+			gated = append(gated, profile)
 		}
 	}
 	if len(profiles) == 0 {
@@ -145,10 +157,12 @@ func (d *PodCustomDefaulter) Default(ctx context.Context, pod *corev1.Pod) error
 	pod.Spec.InitContainers = slices.DeleteFunc(pod.Spec.InitContainers, func(c corev1.Container) bool {
 		return c.Name == GateContainerName
 	})
-	// First, so it also gates the pod's own init containers.
-	pod.Spec.InitContainers = append([]corev1.Container{d.gate(profiles)}, pod.Spec.InitContainers...)
+	if len(gated) > 0 {
+		// First, so it also gates the pod's own init containers.
+		pod.Spec.InitContainers = append([]corev1.Container{d.gate(gated)}, pod.Spec.InitContainers...)
+	}
 	podlog.V(1).Info("Bound Pod to profiles", "namespace", namespace, "name", pod.Name,
-		"generateName", pod.GenerateName, "profiles", profiles)
+		"generateName", pod.GenerateName, "profiles", profiles, "gated", gated)
 	return nil
 }
 
@@ -158,7 +172,7 @@ func (d *PodCustomDefaulter) gate(profiles []string) corev1.Container {
 	return corev1.Container{
 		Name:    GateContainerName,
 		Image:   d.Options.GateImage,
-		Command: []string{"/gate"},
+		Command: []string{gateBinary},
 		// restartPolicy Always on an init container makes it a native sidecar:
 		// the kubelet waits for its startup probe before starting anything else.
 		RestartPolicy: ptr.To(corev1.ContainerRestartPolicyAlways),
@@ -168,7 +182,7 @@ func (d *PodCustomDefaulter) gate(profiles []string) corev1.Container {
 		}},
 		StartupProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: []string{
-				"/gate", "check",
+				gateBinary, "check",
 				"--loader-port=" + strconv.Itoa(d.Options.LoaderPort),
 				"--profiles=" + strings.Join(profiles, ","),
 			}}},
