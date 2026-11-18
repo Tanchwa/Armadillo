@@ -1,0 +1,146 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "armadillo.managerServiceAccount" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "armadillo.componentLabels" (list . "manager") | nindent 4 }}
+  {{- with .Values.manager.serviceAccount.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+---
+{{- /*
+The rules come from config/rbac/role.yaml, which controller-gen generates from
+the +kubebuilder:rbac markers. "make helm-sync" copies it into files/.
+*/}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "armadillo.fullname" . }}-manager
+  labels:
+    {{- include "armadillo.componentLabels" (list . "manager") | nindent 4 }}
+rules:
+  {{- (.Files.Get "files/rbac/manager-role.yaml" | fromYaml).rules | toYaml | nindent 2 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "armadillo.fullname" . }}-manager
+  labels:
+    {{- include "armadillo.componentLabels" (list . "manager") | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "armadillo.fullname" . }}-manager
+subjects:
+- kind: ServiceAccount
+  name: {{ include "armadillo.managerServiceAccount" . }}
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "armadillo.fullname" . }}-leader-election
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "armadillo.componentLabels" (list . "manager") | nindent 4 }}
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "armadillo.fullname" . }}-leader-election
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "armadillo.componentLabels" (list . "manager") | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "armadillo.fullname" . }}-leader-election
+subjects:
+- kind: ServiceAccount
+  name: {{ include "armadillo.managerServiceAccount" . }}
+  namespace: {{ .Release.Namespace }}
+{{- if .Values.metrics.enabled }}
+---
+# Lets the metrics endpoint authenticate and authorize its scrapers.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "armadillo.fullname" . }}-metrics-auth
+  labels:
+    {{- include "armadillo.componentLabels" (list . "manager") | nindent 4 }}
+rules:
+- apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - subjectaccessreviews
+  verbs:
+  - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "armadillo.fullname" . }}-metrics-auth
+  labels:
+    {{- include "armadillo.componentLabels" (list . "manager") | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "armadillo.fullname" . }}-metrics-auth
+subjects:
+- kind: ServiceAccount
+  name: {{ include "armadillo.managerServiceAccount" . }}
+  namespace: {{ .Release.Namespace }}
+---
+# Bind this to whatever scrapes the metrics endpoint.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "armadillo.fullname" . }}-metrics-reader
+  labels:
+    {{- include "armadillo.componentLabels" (list . "manager") | nindent 4 }}
+rules:
+- nonResourceURLs:
+  - /metrics
+  verbs:
+  - get
+{{- end }}

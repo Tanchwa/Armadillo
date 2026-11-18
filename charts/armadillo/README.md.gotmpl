@@ -1,0 +1,58 @@
+{{ template "chart.header" . }}
+{{ template "chart.deprecationWarning" . }}
+
+{{ template "chart.versionBadge" . }}{{ template "chart.typeBadge" . }}{{ template "chart.appVersionBadge" . }}
+
+{{ template "chart.description" . }}
+
+## Install
+
+```bash
+helm install armadillo ./charts/armadillo --namespace armadillo-system --create-namespace
+```
+
+Opt a namespace in to startup gating:
+
+```bash
+kubectl label namespace <namespace> armadillo.andrewsutliff.com/injection=enabled
+```
+
+## What gets installed
+
+| Component | Kind | Does |
+|---|---|---|
+| manager | Deployment | Decides promotion and demotion cluster-wide |
+| webhook | Deployment | Injects the startup gate into bound pods |
+| loader | DaemonSet | Loads profiles on every node and reports what is loaded |
+
+The gate image is not run by the chart: the webhook injects it into
+application pods, so every opted-in namespace must be able to pull it.
+
+## Webhook certificate
+
+`webhook.certificate.source=helm` (the default) generates a self-signed CA at
+install and reuses it on every upgrade. To rotate it, delete the
+`<release>-webhook-cert` Secret and run `helm upgrade`. Set it to `certManager`
+to have cert-manager issue and rotate the certificate instead.
+
+## CRDs
+
+CRDs are templates, not files in `crds/`, so `helm upgrade` upgrades them. By
+default they are annotated `helm.sh/resource-policy: keep` and survive
+`helm uninstall`; deleting them deletes every Armadillo object in the cluster.
+
+## Developing the chart
+
+The CRDs, the manager's RBAC rules and the webhook's rules are generated from
+kubebuilder markers. Do not edit `files/`; run:
+
+```bash
+make helm-sync   # copy generated manifests into the chart
+make helm-docs   # regenerate this README from values.yaml
+make helm-lint   # lint and render the chart
+make helm-deploy IMG=... LOADER_IMG=... GATE_IMG=...   # install from local images
+```
+
+{{ template "chart.requirementsSection" . }}
+
+{{ template "chart.valuesSection" . }}

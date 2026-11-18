@@ -1,0 +1,19 @@
+{{- /*
+CRDs are copied from config/crd/bases by "make helm-sync", not edited here.
+They are templates rather than files in crds/ because Helm never upgrades
+anything in crds/.
+*/}}
+{{- if .Values.crds.enabled }}
+{{- range $path, $_ := .Files.Glob "files/crds/*.yaml" }}
+{{- $crd := $.Files.Get $path | fromYaml }}
+{{- $meta := $crd.metadata }}
+{{- $annotations := default dict $meta.annotations }}
+{{- if $.Values.crds.keep }}
+{{- $_ := set $annotations "helm.sh/resource-policy" "keep" }}
+{{- end }}
+{{- $_ := set $meta "annotations" $annotations }}
+{{- $_ := set $meta "labels" (include "armadillo.labels" $ | fromYaml) }}
+---
+{{ toYaml $crd }}
+{{- end }}
+{{- end }}

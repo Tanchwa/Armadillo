@@ -1,0 +1,44 @@
+{{- if .Values.networkPolicy.enabled }}
+# The API server is not a pod, so webhook ingress cannot be narrowed by
+# selector: only the port is restricted.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "armadillo.fullname" . }}-webhook
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "armadillo.componentLabels" (list . "webhook") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "armadillo.selectorLabels" (list . "webhook") | nindent 6 }}
+  policyTypes:
+  - Ingress
+  ingress:
+  - ports:
+    - port: 9443
+      protocol: TCP
+{{- if .Values.metrics.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "armadillo.fullname" . }}-manager-metrics
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "armadillo.componentLabels" (list . "manager") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "armadillo.selectorLabels" (list . "manager") | nindent 6 }}
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        {{- toYaml .Values.networkPolicy.metricsNamespaceSelector | nindent 8 }}
+    ports:
+    - port: 8443
+      protocol: TCP
+{{- end }}
+{{- end }}

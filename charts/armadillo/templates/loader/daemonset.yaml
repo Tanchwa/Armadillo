@@ -1,0 +1,125 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "armadillo.fullname" . }}-loader
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "armadillo.componentLabels" (list . "loader") | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "armadillo.selectorLabels" (list . "loader") | nindent 6 }}
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: loader
+        {{- with .Values.loader.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "armadillo.componentLabels" (list . "loader") | nindent 8 }}
+        {{- with .Values.loader.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "armadillo.loaderServiceAccount" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      {{- with .Values.loader.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- with .Values.loader.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.loader.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.loader.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: loader
+        image: {{ include "armadillo.image" (list . .Values.loader.image) }}
+        imagePullPolicy: {{ .Values.loader.image.pullPolicy }}
+        args:
+        - --node-name=$(NODE_NAME)
+        - --apparmor-profile-dir=/var/lib/armadillo/profiles
+        - --apparmor-securityfs-dir=/sys/kernel/security/apparmor
+        - --health-probe-bind-address=:8081
+        - --gate-bind-address=:{{ .Values.loader.gatePort }}
+        {{- with .Values.loader.extraArgs }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        ports:
+        # The startup gate asks this endpoint, through the node's IP, whether
+        # a profile is loaded here.
+        - name: gate
+          containerPort: {{ .Values.loader.gatePort }}
+          hostPort: {{ .Values.loader.gatePort }}
+          protocol: TCP
+        - name: health
+          containerPort: 8081
+          protocol: TCP
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        securityContext:
+          runAsUser: 0
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          # The runtime's default AppArmor profile denies loading policy.
+          appArmorProfile:
+            type: Unconfined
+          capabilities:
+            drop:
+            - ALL
+            add:
+            # Loading and replacing AppArmor policy.
+            - MAC_ADMIN
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: health
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: health
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          {{- toYaml .Values.loader.resources | nindent 10 }}
+        volumeMounts:
+        # The container paths are fixed; values only move the host side.
+        - name: apparmor-profiles
+          mountPath: /var/lib/armadillo/profiles
+        # Only the apparmor directory, not the rest of securityfs.
+        - name: securityfs
+          mountPath: /sys/kernel/security/apparmor
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: apparmor-profiles
+        hostPath:
+          path: {{ .Values.loader.profileDir }}
+          type: DirectoryOrCreate
+      - name: securityfs
+        hostPath:
+          path: {{ .Values.loader.securityfsDir }}
+          type: Directory
+      - name: tmp
+        emptyDir: {}
+      terminationGracePeriodSeconds: 10

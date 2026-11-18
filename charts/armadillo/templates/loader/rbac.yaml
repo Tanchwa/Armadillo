@@ -1,0 +1,123 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "armadillo.loaderServiceAccount" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "armadillo.componentLabels" (list . "loader") | nindent 4 }}
+  {{- with .Values.loader.serviceAccount.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+---
+# Mirrors config/loader/rbac.yaml.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "armadillo.fullname" . }}-loader
+  labels:
+    {{- include "armadillo.componentLabels" (list . "loader") | nindent 4 }}
+rules:
+# Read the profiles to load. The loader never writes ManagedProfiles: it does
+# not decide, it applies.
+- apiGroups:
+  - armadillo.andrewsutliff.com
+  resources:
+  - managedprofiles
+  verbs:
+  - get
+  - list
+  - watch
+# Report what is loaded on this node.
+- apiGroups:
+  - armadillo.andrewsutliff.com
+  resources:
+  - profilenodestatuses
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - armadillo.andrewsutliff.com
+  resources:
+  - profilenodestatuses/status
+  verbs:
+  - get
+  - update
+  - patch
+# No access to nodes: a loader that could patch nodes could cordon or relabel
+# any node in the cluster.
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "armadillo.fullname" . }}-loader
+  labels:
+    {{- include "armadillo.componentLabels" (list . "loader") | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "armadillo.fullname" . }}-loader
+subjects:
+- kind: ServiceAccount
+  name: {{ include "armadillo.loaderServiceAccount" . }}
+  namespace: {{ .Release.Namespace }}
+{{- if .Values.loader.nodeRestriction.enabled }}
+---
+# Mirrors config/loader/node_restriction.yaml. RBAC cannot scope a DaemonSet's
+# service account to one node; this limits each loader to the
+# ProfileNodeStatus objects of the node its pod runs on. Without the node name
+# in the service account token (Kubernetes 1.30+), loader writes are denied.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: {{ include "armadillo.fullname" . }}-loader-node-restriction
+  labels:
+    {{- include "armadillo.componentLabels" (list . "loader") | nindent 4 }}
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups:
+      - armadillo.andrewsutliff.com
+      apiVersions:
+      - "*"
+      operations:
+      - CREATE
+      - UPDATE
+      - DELETE
+      resources:
+      - profilenodestatuses
+      - profilenodestatuses/status
+  matchConditions:
+  - name: is-loader
+    expression: request.userInfo.username == 'system:serviceaccount:{{ .Release.Namespace }}:{{ include "armadillo.loaderServiceAccount" . }}'
+  variables:
+  - name: target
+    expression: "request.operation == 'DELETE' ? oldObject : object"
+  validations:
+  - expression: >-
+      has(request.userInfo.extra) &&
+      'authentication.kubernetes.io/node-name' in request.userInfo.extra
+    message: The loader's service account token carries no node name, so its writes cannot be tied to a node.
+  - expression: >-
+      !has(request.userInfo.extra) ||
+      !('authentication.kubernetes.io/node-name' in request.userInfo.extra) ||
+      variables.target.spec.nodeName == request.userInfo.extra['authentication.kubernetes.io/node-name'][0]
+    message: A loader may only write the ProfileNodeStatus objects of the node it runs on.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: {{ include "armadillo.fullname" . }}-loader-node-restriction
+  labels:
+    {{- include "armadillo.componentLabels" (list . "loader") | nindent 4 }}
+spec:
+  policyName: {{ include "armadillo.fullname" . }}-loader-node-restriction
+  validationActions:
+  - Deny
+{{- end }}

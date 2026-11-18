@@ -1,0 +1,165 @@
+# Default values for armadillo. Comments starting with "# --" are rendered
+# into README.md by helm-docs ("make helm-docs").
+
+# -- Override the chart name used in resource names.
+nameOverride: ""
+# -- Override the full resource name prefix.
+fullnameOverride: ""
+
+# -- Secrets used to pull the manager, webhook and loader images. The gate
+# image is pulled in application namespaces, so these do not apply to it.
+imagePullSecrets: []
+
+# -- Labels added to every resource.
+commonLabels: {}
+
+crds:
+  # -- Install and upgrade the CRDs with the chart.
+  enabled: true
+  # -- Keep the CRDs when the release is uninstalled. Deleting them deletes
+  # every ManagedProfile and ProfileBinding in the cluster.
+  keep: true
+
+# The controller manager: decides promotion and demotion cluster-wide.
+manager:
+  image:
+    # -- Manager image. The webhook runs from the same image.
+    repository: docker.io/tanchwa/armadillo-manager
+    # -- Defaults to the chart's appVersion.
+    tag: ""
+    pullPolicy: IfNotPresent
+  # -- Replicas. Only the leader reconciles; more replicas only shorten failover.
+  replicas: 1
+  git:
+    # -- Comma-separated hosts the manager may fetch profile repositories from.
+    allowedHosts: github.com
+    # -- How often profile repositories are re-fetched.
+    syncInterval: 5m
+  # -- Extra command-line arguments.
+  extraArgs: []
+  resources:
+    limits:
+      cpu: 500m
+      memory: 128Mi
+    requests:
+      cpu: 10m
+      memory: 64Mi
+  podAnnotations: {}
+  podLabels: {}
+  nodeSelector:
+    kubernetes.io/os: linux
+  tolerations: []
+  affinity: {}
+  priorityClassName: ""
+  serviceAccount:
+    annotations: {}
+
+# The mutating webhook that injects the startup gate into bound pods.
+webhook:
+  # -- Replicas. Pod creation in opted-in namespaces fails while none is up.
+  replicas: 2
+  # -- Extra command-line arguments. The webhook runs from manager.image.
+  extraArgs: []
+  # -- What the API server does when the webhook is unreachable. Ignore lets
+  # pods start without a gate, and so without a guarantee their profile is
+  # loaded.
+  failurePolicy: Fail
+  timeoutSeconds: 5
+  # -- Namespaces whose pods the webhook sees. Opt-in by label by default.
+  namespaceSelector:
+    matchLabels:
+      armadillo.andrewsutliff.com/injection: enabled
+  # -- Narrow further to pods matching this selector.
+  objectSelector: {}
+  podDisruptionBudget:
+    # -- Keep at least one webhook replica through voluntary disruptions.
+    enabled: true
+    minAvailable: 1
+  certificate:
+    # -- Where the serving certificate comes from. "certManager" needs
+    # cert-manager installed. "helm" generates a self-signed CA at install and
+    # reuses it on upgrade.
+    source: helm
+    # -- Validity of a "helm" certificate, in days.
+    duration: 3650
+  resources:
+    limits:
+      cpu: 500m
+      memory: 128Mi
+    requests:
+      cpu: 10m
+      memory: 64Mi
+  podAnnotations: {}
+  podLabels: {}
+  nodeSelector:
+    kubernetes.io/os: linux
+  tolerations: []
+  # -- Defaults to spreading replicas across nodes.
+  affinity: {}
+  priorityClassName: ""
+  serviceAccount:
+    annotations: {}
+
+# The startup gate the webhook injects into bound pods as a native sidecar.
+gate:
+  image:
+    # -- Gate image. Every opted-in namespace must be able to pull it.
+    repository: docker.io/tanchwa/armadillo-gate
+    # -- Defaults to the chart's appVersion.
+    tag: ""
+
+# The DaemonSet that loads profiles on each node.
+loader:
+  image:
+    repository: docker.io/tanchwa/armadillo-loader
+    # -- Defaults to the chart's appVersion.
+    tag: ""
+    pullPolicy: IfNotPresent
+  # -- Host port of the gate endpoint the startup gate polls. The webhook is
+  # configured with the same value.
+  gatePort: 9099
+  # -- Host directory profiles are written to. Kept apart from
+  # /etc/apparmor.d so the loader cannot overwrite the host's own profiles.
+  profileDir: /var/lib/armadillo/profiles
+  # -- Host path of the AppArmor securityfs directory.
+  securityfsDir: /sys/kernel/security/apparmor
+  nodeRestriction:
+    # -- Install a ValidatingAdmissionPolicy that limits each loader to its own
+    # node's ProfileNodeStatus objects.
+    enabled: true
+  extraArgs: []
+  resources:
+    limits:
+      cpu: 200m
+      memory: 128Mi
+    requests:
+      cpu: 10m
+      memory: 64Mi
+  podAnnotations: {}
+  podLabels: {}
+  nodeSelector:
+    kubernetes.io/os: linux
+  # -- A node without a loader cannot run any bound pod, so tolerate every taint.
+  tolerations:
+  - operator: Exists
+  affinity: {}
+  priorityClassName: system-node-critical
+  serviceAccount:
+    annotations: {}
+
+metrics:
+  # -- Serve the manager's metrics over HTTPS on port 8443.
+  enabled: true
+  serviceMonitor:
+    # -- Create a Prometheus Operator ServiceMonitor.
+    enabled: false
+    labels: {}
+    interval: ""
+
+networkPolicy:
+  # -- Restrict ingress to the webhook and metrics ports.
+  enabled: false
+  # -- Namespaces allowed to scrape metrics.
+  metricsNamespaceSelector:
+    matchLabels:
+      metrics: enabled

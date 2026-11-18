@@ -1,0 +1,94 @@
+{{- /*
+The serving certificate and the webhook configuration share one file so that
+the CA generated for "helm" certificates is the same one put in caBundle.
+*/}}
+{{- $service := include "armadillo.webhookService" . }}
+{{- $secretName := include "armadillo.webhookCertSecret" . }}
+{{- $dnsNames := list (printf "%s.%s.svc" $service .Release.Namespace) (printf "%s.%s.svc.cluster.local" $service .Release.Namespace) }}
+{{- $caBundle := "" }}
+{{- if eq .Values.webhook.certificate.source "helm" }}
+{{- /* Reuse the existing certificate, or every upgrade would rotate it. */}}
+{{- $existing := lookup "v1" "Secret" .Release.Namespace $secretName }}
+{{- $crt := "" }}
+{{- $key := "" }}
+{{- if and $existing (index $existing.data "ca.crt") }}
+{{- $caBundle = index $existing.data "ca.crt" }}
+{{- $crt = index $existing.data "tls.crt" }}
+{{- $key = index $existing.data "tls.key" }}
+{{- else }}
+{{- $ca := genCA (printf "%s-ca" (include "armadillo.fullname" .)) (int .Values.webhook.certificate.duration) }}
+{{- $cert := genSignedCert (first $dnsNames) nil $dnsNames (int .Values.webhook.certificate.duration) $ca }}
+{{- $caBundle = $ca.Cert | b64enc }}
+{{- $crt = $cert.Cert | b64enc }}
+{{- $key = $cert.Key | b64enc }}
+{{- end }}
+apiVersion: v1
+kind: Secret
+type: kubernetes.io/tls
+metadata:
+  name: {{ $secretName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "armadillo.componentLabels" (list . "webhook") | nindent 4 }}
+data:
+  ca.crt: {{ $caBundle }}
+  tls.crt: {{ $crt }}
+  tls.key: {{ $key }}
+{{- else if eq .Values.webhook.certificate.source "certManager" }}
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ include "armadillo.fullname" . }}-selfsigned
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "armadillo.componentLabels" (list . "webhook") | nindent 4 }}
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "armadillo.fullname" . }}-webhook
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "armadillo.componentLabels" (list . "webhook") | nindent 4 }}
+spec:
+  dnsNames:
+  {{- toYaml $dnsNames | nindent 2 }}
+  issuerRef:
+    kind: Issuer
+    name: {{ include "armadillo.fullname" . }}-selfsigned
+  secretName: {{ $secretName }}
+{{- else }}
+{{- fail "webhook.certificate.source must be \"helm\" or \"certManager\"" }}
+{{- end }}
+---
+{{- /*
+Rules, paths and sideEffects come from config/webhook/manifests.yaml, which
+controller-gen generates from the +kubebuilder:webhook markers. "make
+helm-sync" copies it into files/.
+*/}}
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: {{ include "armadillo.fullname" . }}
+  labels:
+    {{- include "armadillo.componentLabels" (list . "webhook") | nindent 4 }}
+  {{- if eq .Values.webhook.certificate.source "certManager" }}
+  annotations:
+    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "armadillo.fullname" . }}-webhook
+  {{- end }}
+webhooks:
+{{- range $hook := (.Files.Get "files/webhook/manifests.yaml" | fromYaml).webhooks }}
+{{- $_ := set $hook.clientConfig "service" (dict "name" $service "namespace" $.Release.Namespace "path" $hook.clientConfig.service.path) }}
+{{- if $caBundle }}
+{{- $_ := set $hook.clientConfig "caBundle" $caBundle }}
+{{- end }}
+{{- $_ := set $hook "failurePolicy" $.Values.webhook.failurePolicy }}
+{{- $_ := set $hook "timeoutSeconds" $.Values.webhook.timeoutSeconds }}
+{{- $_ := set $hook "namespaceSelector" $.Values.webhook.namespaceSelector }}
+{{- with $.Values.webhook.objectSelector }}
+{{- $_ := set $hook "objectSelector" . }}
+{{- end }}
+- {{ toYaml $hook | nindent 2 | trim }}
+{{- end }}

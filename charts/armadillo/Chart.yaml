@@ -1,0 +1,18 @@
+apiVersion: v2
+name: armadillo
+description: Distributes and promotes AppArmor profiles learned by apparmor-profile-action
+type: application
+# The chart version. Bump on every chart change.
+version: 0.1.0
+# The default tag of all three images. Only "latest" is published so far; set
+# this to the release tag once images are tagged.
+appVersion: "latest"
+kubeVersion: ">=1.30.0-0"
+home: https://github.com/Tanchwa/Armadillo
+sources:
+- https://github.com/Tanchwa/Armadillo
+- https://github.com/Tanchwa/apparmor-profile-action
+keywords:
+- apparmor
+- security
+- operator
