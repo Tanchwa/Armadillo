@@ -164,6 +164,49 @@ build-installer: manifests generate kustomize ## Generate a consolidated YAML wi
 	cd config/loader && "$(KUSTOMIZE)" edit set image loader=${LOADER_IMG}
 	"$(KUSTOMIZE)" build config/default > dist/install.yaml
 
+##@ Helm
+
+CHART_DIR ?= charts/armadillo
+
+.PHONY: helm-sync
+helm-sync: manifests ## Copy generated CRDs, manager RBAC and webhook rules into the chart.
+	rm -rf $(CHART_DIR)/files
+	mkdir -p $(CHART_DIR)/files/crds $(CHART_DIR)/files/rbac $(CHART_DIR)/files/webhook
+	cp config/crd/bases/*.yaml $(CHART_DIR)/files/crds/
+	cp config/rbac/role.yaml $(CHART_DIR)/files/rbac/manager-role.yaml
+	cp config/webhook/manifests.yaml $(CHART_DIR)/files/webhook/manifests.yaml
+
+.PHONY: helm-verify
+helm-verify: helm-sync helm-docs ## Fail if the chart is out of date with the markers or values.yaml.
+	@git diff --exit-code -- $(CHART_DIR) && test -z "$$(git ls-files --others --exclude-standard -- $(CHART_DIR))" || { \
+		echo "The chart is out of date: run \"make helm-sync helm-docs\" and commit the result."; exit 1; }
+
+.PHONY: helm-lint
+helm-lint: helm-sync ## Lint the chart and render it with each certificate source.
+	$(HELM) lint --strict $(CHART_DIR)
+	$(HELM) template armadillo $(CHART_DIR) > /dev/null
+	$(HELM) template armadillo $(CHART_DIR) --set webhook.certificate.source=certManager \
+		--set metrics.serviceMonitor.enabled=true --set networkPolicy.enabled=true > /dev/null
+
+.PHONY: helm-docs
+helm-docs: helm-docs-tool ## Regenerate the chart README from values.yaml.
+	"$(HELM_DOCS)" --chart-search-root $(CHART_DIR)
+
+.PHONY: helm-deploy
+helm-deploy: export IMG := $(IMG)
+helm-deploy: export LOADER_IMG := $(LOADER_IMG)
+helm-deploy: export GATE_IMG := $(GATE_IMG)
+helm-deploy: helm-sync ## Install or upgrade the chart in the current kube context, using IMG, LOADER_IMG and GATE_IMG.
+	$(HELM) upgrade --install armadillo $(CHART_DIR) --namespace armadillo-system --create-namespace \
+		--set manager.image.repository="$${IMG%:*}" --set manager.image.tag="$${IMG##*:}" \
+		--set loader.image.repository="$${LOADER_IMG%:*}" --set loader.image.tag="$${LOADER_IMG##*:}" \
+		--set gate.image.repository="$${GATE_IMG%:*}" --set gate.image.tag="$${GATE_IMG##*:}" \
+		$(HELM_EXTRA_ARGS)
+
+.PHONY: helm-uninstall
+helm-uninstall: ## Uninstall the chart. CRDs are kept unless crds.keep=false.
+	$(HELM) uninstall armadillo --namespace armadillo-system
+
 ##@ Deployment
 
 ifndef ignore-not-found
@@ -201,8 +244,10 @@ $(LOCALBIN):
 ## Tool Binaries
 KUBECTL ?= kubectl
 KIND ?= kind
+HELM ?= helm
 KUSTOMIZE ?= $(LOCALBIN)/kustomize
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
+HELM_DOCS ?= $(LOCALBIN)/helm-docs
 ENVTEST ?= $(LOCALBIN)/setup-envtest
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
 
@@ -221,6 +266,7 @@ ENVTEST_K8S_VERSION ?= $(shell v='$(call gomodver,k8s.io/api)'; \
   printf '%s\n' "$$v" | sed -E 's/^v?[0-9]+\.([0-9]+).*/1.\1/')
 
 GOLANGCI_LINT_VERSION ?= v2.12.2
+HELM_DOCS_VERSION ?= v1.14.2
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
 $(KUSTOMIZE): $(LOCALBIN)
@@ -230,6 +276,11 @@ $(KUSTOMIZE): $(LOCALBIN)
 controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary.
 $(CONTROLLER_GEN): $(LOCALBIN)
 	$(call go-install-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen,$(CONTROLLER_TOOLS_VERSION))
+
+.PHONY: helm-docs-tool
+helm-docs-tool: $(HELM_DOCS) ## Download helm-docs locally if necessary.
+$(HELM_DOCS): $(LOCALBIN)
+	$(call go-install-tool,$(HELM_DOCS),github.com/norwoodj/helm-docs/cmd/helm-docs,$(HELM_DOCS_VERSION))
 
 .PHONY: setup-envtest
 setup-envtest: envtest ## Download the binaries required for ENVTEST in the local bin directory.
